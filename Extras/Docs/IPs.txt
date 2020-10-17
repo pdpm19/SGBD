@@ -1,0 +1,7 @@
+LOCAL:
+192.168.0.22,49172
+
+https://www.youtube.com/watch?v=Aff9jwSPRTU&ab_channel=JoshBurnsTech
+https://www.youtube.com/watch?v=jgWOZT6za3g&ab_channel=CodingWithAndrew
+EXTERNO:
+84.90.33.180,49172
