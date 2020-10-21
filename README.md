@@ -7,4 +7,8 @@
 
 ## TO DO
 - [x] Connect to DB Server
-- [ ] Choose independency level
+- [x] Homepage
+- [ ] Edit
+- [ ] List
+- [ ] Time Log
+- [ ] Log

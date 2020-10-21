@@ -7,7 +7,7 @@ uiPath = os.path.join(workingDirectory, 'gui')
 
 sys.path.append(uiPath)
 
-from loginDlg import DisplayLogin
+from gui import DisplayGUI
 
 if __name__ == "__main__":
-    DisplayLogin(uiPath)
+    DisplayGUI(uiPath)
