@@ -1,33 +1,61 @@
 # Main window da app
 import sys
 import os
+import time
 import pyodbc
+import numpy as np
 from PyQt5.QtWidgets import *
 from PyQt5.QtCore import *
 from PyQt5.QtGui import *
 
 from connectDlg import Connect
 
+# Para correr o timer do refresh automático
+class Threads(QRunnable):
+    def __init__(self, timer: int, stackedIndex: int, stop: bool):
+        super(Threads, self).__init__()
+        self._timer = timer
+        self._stackedIndex = stackedIndex
+        self._stop = stop
+        
+        self.run()
+    
+    @pyqtSlot()    
+    def run(self):
+        if self._stackedIndex == 2:
+            while True:
+                print('THREAD A BOMBAR!')
+                time.sleep(self._timer)
+                if self._stop:
+                    break
+                # Chamar a função
+                app.RefreshBrowser()
+        #if stackedIndex == 3:
+        #if stackedIndex == 4:    
+
 # Modal da TableView
 class TableModel(QStandardItemModel):
-    def __init__(self, data):
+    def __init__(self, data, setHeader: int):
         super(TableModel, self).__init__()
         self._data = data
+        self._setHeader = setHeader
+        
         print(self._data)
-        self.setHorizontalHeaderLabels(['ID do Produto', 'Designação', 'Preço', 'Quantidade', 'ID do Cliente', 'Nome do Cliente', 'Morada do Cliente'])
         self.FillsData()
     
     def FillsData(self):
-        nRows = 0
-        nColumns = 7
-        for i in self._data:
-            nRows += 1
-
-        for j in range(nRows):
-            aux = self._data[j]
-            for i in aux:
-                item = QStandardItem(i)
-            self.appendRow(j, item)
+        if self._setHeader == 0:
+            self.setHorizontalHeaderLabels(['ID do Produto', 'Designação', 'Preço', 'Quantidade', 'ID do Cliente', 'Nome do Cliente', 'Morada do Cliente'])
+        
+        if self._setHeader == 1:
+            self.setHorizontalHeaderLabels(['NumReg', 'EventType', 'Objecto', 'Valor', 'Referencia', 'UserID', 'TerminalID', 'TerminalName', 'DCriacao'])
+        nRows, nColumns = self._data.shape
+        
+        for i in range(nRows):
+            for j in range(nColumns):
+                item = QStandardItem(str(self._data[i, j]))
+                self.setItem(i, j, item)
+        
 # Aplicação principal
 class GUI(QMainWindow):
     def __init__(self, windowTitle, uiPath, cursor, dbName):
@@ -77,6 +105,10 @@ class GUI(QMainWindow):
         self.logWidgets = QWidget()
         self.logLayout = QVBoxLayout()
         self.LogUI()
+
+        # Threads
+        self.threadpool = QThreadPool()
+        self.timer = 5
         
         self.stacked.addWidget(self.homepageWidgets)
         self.stacked.addWidget(self.editWidgets)
@@ -94,6 +126,16 @@ class GUI(QMainWindow):
         self.designacao = []
         self.preco = []
         self.qtd = []
+        self.numReg = []
+        self.eventType = []
+        self.objeto = []
+        self.valor = []
+        self.referencia = []
+        self.userID = []
+        self.terminalID = []
+        self.terminalName = []
+        self.dataCriacao = []
+        
 
     # Vai mostrar as aplicações & O nivel de isolamento pretendido
     def HomepageUI(self):
@@ -110,7 +152,7 @@ class GUI(QMainWindow):
         app3Button.pressed.connect(lambda: self.stacked.setCurrentIndex(3))
 
         app4Button = QPushButton('App4 - Log')
-        app4Button.pressed.connect(lambda: self.stacked.setCurrentIndex(4))
+        app4Button.pressed.connect(self.DisplayLog)
 
         appsLayout.addWidget(app1Button, 0,0)
         appsLayout.addWidget(app2Button, 0,1)
@@ -301,17 +343,10 @@ class GUI(QMainWindow):
 
         self.choosedEnc = QComboBox()
 
-        
-        self.table = QTableView()
-        data = []
-        data.append(['1', '2', '3', '4', '5', '6', '7'])
-        data.append(['1', '2', '3', '4', '5', '6', '7'])
-        
-        modal = TableModel(data)
-        self.table.setModel(modal)
+        self.browserTable = QTableView()
         
         formLayout.addRow(QLabel('ID da encomenda:'), self.choosedEnc)
-        formLayout.addRow(self.table)
+        formLayout.addRow(self.browserTable)
 
         formWidget.setLayout(formLayout)
         self.browserLayout.addWidget(formWidget)
@@ -322,47 +357,93 @@ class GUI(QMainWindow):
     def DisplayBrowser(self):
         self.stacked.setCurrentIndex(2)
         
+        # Vai ativar a thread
+        self.browserRefreshStop = False
+        print(self.stacked.currentIndex())
+        self.browser_thread = Threads(self.timer, self.stacked.currentIndex(), lambda: self.browserRefreshStop)
+        self.threadpool.start(self.browser_thread)
+        
         query = MakeTransaction(self.cursor, self.isolationComboBox.currentText(), 'SELECT', ['EncID'], self.dbName, 'Encomenda', [])   
         
         for row in query:
             self.encIDs.append(str(row[0]))
-        
+
         self.choosedEnc.addItems(self.encIDs)
-        if self.choosedEnc.currentText():
-            self.choosedEnc.currentIndexChanged.connect(self.RefreshBrowser)
-    
-    # vai dar refresh aos dados
+        self.choosedEnc.currentIndexChanged.connect(self.RefreshBrowser)
+
+        query = MakeTransaction(self.cursor, self.isolationComboBox.currentText(), 'SELECT', ['*'], self.dbName, 'Encomenda', [['EncID', '=', self.choosedEnc.currentText()]]) 
+                
+        for row in query:
+            clienteID = str(row[1])
+            clienteNome = str(row[2])
+            clienteMorada = (row[3])
+                    
+        query = MakeTransaction(self.cursor, self.isolationComboBox.currentText(), 'SELECT', ['*'], self.dbName, 'EncLinha', [['EncID', '=', self.choosedEnc.currentText()]])      
+
+        self.ClearAuxiliar(2)           
+        for row in query:
+            self.produtoIDs.append(str(row[1]))
+            self.designacao.append(str(row[2]))
+            self.preco.append(str(row[3]))
+            self.qtd.append(str(row[4]))
+
+        aux = []
+        # Vai preencher a lista auxiliar
+        for i in range(len(self.qtd)):
+            aux.append([self.produtoIDs[i], self.designacao[i], self.preco[i], self.qtd[i], clienteID, clienteNome, clienteMorada])
+        print('AUXILIAR %d' %len(aux))
+        data = np.matrix(aux)
+
+        modal = TableModel(data, 0)
+        self.browserTable.setModel(modal)    
+        
+    # vai dar refresh aos dados manualmente
     def RefreshBrowser(self):
         # vai limpar o que já existe
         if self.choosedEnc.currentText():
-            self.table.clearSpans()
+            self.browserTable.clearSpans()
+            self.ClearAuxiliar(0)
 
-            currentID = self.choosedEnc.currentText()
-            
-            # Conteúdo tabela Encomenda
-            query = MakeTransaction(self.cursor, self.isolationComboBox.currentText(), 'SELECT', ['*'], self.dbName, 'Encomenda', [['EncID', '=', str(currentID)]])
-            for row in query:
-                self.clienteIDs.append(str(row[0]))
-                self.clienteNome.append(str(row[1]))
-                self.clienteMorada.append(str(row[2]))
+            query = MakeTransaction(self.cursor, self.isolationComboBox.currentText(), 'SELECT', ['*'], self.dbName, 'Encomenda', [['EncID', '=', self.choosedEnc.currentText()]]) 
                 
-            # Conteúdo tabela EncLinha
-            query = MakeTransaction(self.cursor, self.isolationComboBox.currentText(), 'SELECT', ['*'], self.dbName, 'EncLinha', [['EncID', '=', str(currentID)]])
             for row in query:
-                self.produtoIDs.append(str(row[0]))
-                self.designacao.append(str(row[1]))
-                self.preco.append(str(row[2]))
-                self.qtd.append(str(row[3]))
+                clienteID = str(row[1])
+                clienteNome = str(row[2])
+                clienteMorada = (row[3])
+                    
+            query = MakeTransaction(self.cursor, self.isolationComboBox.currentText(), 'SELECT', ['*'], self.dbName, 'EncLinha', [['EncID', '=', self.choosedEnc.currentText()]])      
+                    
+            for row in query:
+                self.produtoIDs.append(str(row[1]))
+                self.designacao.append(str(row[2]))
+                self.preco.append(str(row[3]))
+                self.qtd.append(str(row[4]))
+                
+            aux = []
+            # Vai preencher a lista auxiliar
+            for i in range(len(self.qtd)):
+                aux.append([self.produtoIDs[i], self.designacao[i], self.preco[i], self.qtd[i], clienteID, clienteNome, clienteMorada])
+
+            data = np.matrix(aux)
+
+            modal = TableModel(data, 0)
+            self.browserTable.setModel(modal)
+        else:
+            self.ClearAuxiliar(0)
+            self.browserTable.clearSpans()
 
     # Fecha e limpa os dados
     def CloseBrowser(self):
-        self.stacked.setCurrentIndex(0)
-        
-        # Limpa as
-        self.choosedEnc.clear()
         # Limpa as variáveis auxiliarews
         self.ClearAuxiliar(0)
-        self.table.clearSpans()
+        
+        self.choosedEnc.clear()
+        self.browserTable.clearSpans()
+        
+        self.ClearAuxiliar(0)
+        
+        self.browserRefreshStop = True
+        self.stacked.setCurrentIndex(0)
     
     def ClearAuxiliar(self, op):
         if op == 0:
@@ -384,6 +465,11 @@ class GUI(QMainWindow):
             self.designacao.clear()
             self.preco.clear()
             self.qtd.clear()
+        if op == 3:
+            self.numReg.clear()
+            self.eventType.clear()
+            self.objeto.clear()
+            self.valor.clear()
     
     def TimeLogUI(self):
         backButton = QPushButton('Voltar')
@@ -393,11 +479,102 @@ class GUI(QMainWindow):
         self.timeLogWidgets.setLayout(self.timeLogLayout)
     
     def LogUI(self):
-        backButton = QPushButton('Voltar')
-        backButton.pressed.connect(lambda: self.stacked.setCurrentIndex(0))
+        
 
-        self.logLayout.addWidget(backButton)
+        backButton = QPushButton('Voltar')
+        backButton.pressed.connect(self.CloseLog)
+
+        refreshButton = QPushButton('Refresh')
+        refreshButton.pressed.connect(self.RefreshLog)
+
+        buttonsLayout = QHBoxLayout()
+        buttonsWidget = QWidget()
+
+        buttonsLayout.addWidget(backButton)
+        buttonsLayout.addWidget(refreshButton)
+        buttonsWidget.setLayout(buttonsLayout)
+        
+        formLayout = QFormLayout()
+        formWidget = QWidget()
+
+        self.numberLines = QLineEdit()
+        self.numberLines.setValidator(QIntValidator())
+
+        self.logTable = QTableView()
+        
+        formLayout.addRow(QLabel('Nº de linhas:'), self.numberLines)
+        formLayout.addRow(self.logTable)
+
+        formWidget.setLayout(formLayout)
+
+        self.logLayout.addWidget(formWidget)
+        self.logLayout.addWidget(buttonsWidget)
         self.logWidgets.setLayout(self.logLayout)
+
+    def DisplayLog(self):
+        self.stacked.setCurrentIndex(4)
+        
+        '''
+        # Vai ativar a thread
+        self.logRefreshStop = False
+        self.log_thread = Threads(self.timer, self.stacked.currentIndex(), lambda: self.logRefreshStop)
+        self.threadpool.start(self.log_thread)
+        '''
+        query = MakeTransaction(self.cursor, self.isolationComboBox.currentText(), 'SELECT', ['*'], self.dbName, 'LogOperations', [])
+
+        for row in query:
+            self.numReg.append(str(row[0]))
+            self.eventType.append(str(row[1]))
+            self.objeto.append(str(row[2]))
+            self.valor.append(str(row[3]))
+            self.referencia.append(str(row[4]))
+            self.userID.append(str(row[5]))
+            self.terminalID.append(str(row[6]))
+            self.terminalName.append(str(row[7]))
+            self.dataCriacao.append(str(row[8]))
+           
+        aux = []
+        for i in range(len(self.numReg)):
+            aux.append([self.numReg[i], self.eventType[i], self.objeto[i], self.valor[i], self.referencia[i], self.userID[i], self.terminalID[i], self.terminalName[i], self.dataCriacao[i]])
+            
+        data = np.matrix(aux)
+
+        modal = TableModel(data, 1)
+        self.logTable.setModel(modal)
+
+    # Vai preencher as n linhas do Log
+    def RefreshLog(self):
+        self.logTable.clearSpans()
+        self.ClearAuxiliar(3)
+        if int(self.numberLines.text()) != 0:
+            query = MakeTransaction(self.cursor, self.isolationComboBox.currentText(), 'SELECT', ['*'], self.dbName, 'LogOperations', [])
+
+            for row in query:
+                self.numReg.append(str(row[0]))
+                self.eventType.append(str(row[1]))
+                self.objeto.append(str(row[2]))
+                self.valor.append(str(row[3]))
+                self.referencia.append(str(row[4]))
+                self.userID.append(str(row[5]))
+                self.terminalID.append(str(row[6]))
+                self.terminalName.append(str(row[7]))
+                self.dataCriacao.append(str(row[8]))
+            
+            aux = []
+            for i in range(len(self.numReg) - int(self.numberLines.text()), len(self.numReg)):
+                aux.append([self.numReg[i], self.eventType[i], self.objeto[i], self.valor[i], self.referencia[i], self.userID[i], self.terminalID[i], self.terminalName[i], self.dataCriacao[i]])
+            
+            data = np.matrix(aux)
+
+            modal = TableModel(data, 1)
+            self.logTable.setModel(modal)
+            
+    def CloseLog(self):
+        self.numberLines.clear()
+        self.ClearAuxiliar(3)
+        self.logTable.clearSpans()
+        self.stacked.setCurrentIndex(0)
+        
 
 # As transações de leitura são feitas aqui
 def MakeTransaction(cursor, isolationLevel: str, operation : str, returnRow: list, dbName: str, tableName: str, restrictor: list):
