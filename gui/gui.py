@@ -8,27 +8,27 @@ from PyQt5.QtGui import *
 
 from connectDlg import Connect
 
-# Torna input em Table Mode View
-class TableModel(QAbstractTableModel):
+# Modal da TableView
+class TableModel(QStandardItemModel):
     def __init__(self, data):
         super(TableModel, self).__init__()
         self._data = data
-
-    def data(self, index, role):
-        if role == Qt.DisplayRole:
-            return self._data[index.row()][index.column()]
+        print(self._data)
+        self.setHorizontalHeaderLabels(['ID do Produto', 'Designação', 'Preço', 'Quantidade', 'ID do Cliente', 'Nome do Cliente', 'Morada do Cliente'])
+        self.FillsData()
     
-    def rowCount(self, index):
-        # The length of the outer list.
-        return len(self._data)
+    def FillsData(self):
+        nRows = 0
+        nColumns = 7
+        for i in self._data:
+            nRows += 1
 
-    def columnCount(self, index):
-        # The following takes the first sub-list, and returns
-        # the length (only works if all rows are an equal length)
-        return len(self._data[0])
-
-
-# Aplicação principal-
+        for j in range(nRows):
+            aux = self._data[j]
+            for i in aux:
+                item = QStandardItem(i)
+            self.appendRow(j, item)
+# Aplicação principal
 class GUI(QMainWindow):
     def __init__(self, windowTitle, uiPath, cursor, dbName):
         super(GUI, self).__init__()
@@ -85,6 +85,16 @@ class GUI(QMainWindow):
         self.stacked.addWidget(self.logWidgets)
         self.setCentralWidget(self.scroll)
 
+        # Variáveis auxiliares para o preenchimento dos campos
+        self.encIDs = []
+        self.clienteIDs = []
+        self.clienteNome = []
+        self.clienteMorada = []
+        self.produtoIDs = []
+        self.designacao = []
+        self.preco = []
+        self.qtd = []
+
     # Vai mostrar as aplicações & O nivel de isolamento pretendido
     def HomepageUI(self):
         appsLayout = QGridLayout()
@@ -94,7 +104,7 @@ class GUI(QMainWindow):
         app1Button.pressed.connect(self.DisplayEdit)
         
         app2Button = QPushButton('App2 - Browser')
-        app2Button.pressed.connect(lambda: self.stacked.setCurrentIndex(2))
+        app2Button.pressed.connect(self.DisplayBrowser)
 
         app3Button = QPushButton('App3 - Log tempo')
         app3Button.pressed.connect(lambda: self.stacked.setCurrentIndex(3))
@@ -121,6 +131,8 @@ class GUI(QMainWindow):
         self.homepageLayout.addWidget(appsWidget)
         self.homepageLayout.addWidget(isolationWidget)
         self.homepageWidgets.setLayout(self.homepageLayout)
+
+        
     
     # Vai permitir ao utilizador Editar as encomendas
     def EditUI(self):
@@ -141,18 +153,29 @@ class GUI(QMainWindow):
         formWidget = QWidget()
 
         self.encIDField = QComboBox()
-        self.encIDs = []
         self.clientIDField = QLineEdit()
-        self.clientIDs = []
+        self.clientIDField.setReadOnly(True)
         self.clientNameField = QLineEdit()
-        self.clientName = []
-        self.clientAddressField = QLineEdit()
-        self.clientAddress = []
+        self.clientNameField.setReadOnly(True)
+        self.clienteMoradaField = QLineEdit()
+        self.productIDField = QComboBox()
+        self.productDesignationField = QLineEdit()
+        self.productDesignationField.setReadOnly(True)
+        self.productPriceField = QLineEdit()
+        self.productPriceField.setReadOnly(True)
+        self.productQtdField = QLineEdit()
+        self.productQtdField.setValidator(QIntValidator())
+
+        
         
         formLayout.addRow(QLabel('ID da Encomenda:'), self.encIDField)
         formLayout.addRow(QLabel('ID do Cliente:'), self.clientIDField)
         formLayout.addRow(QLabel('Nome do Cliente:'), self.clientNameField)
-        formLayout.addRow(QLabel('Morada do Cliente:'), self.clientAddressField) 
+        formLayout.addRow(QLabel('Morada do Cliente:'), self.clienteMoradaField) 
+        formLayout.addRow(QLabel('ID do Produto:'), self.productIDField)
+        formLayout.addRow(QLabel('Designação do Produto:'), self.productDesignationField)
+        formLayout.addRow(QLabel('Preço do Produto:'), self.productPriceField)
+        formLayout.addRow(QLabel('Quantidade do Produto:'), self.productQtdField)
         formWidget.setLayout(formLayout)       
         
         self.editLayout.addWidget(formWidget)
@@ -167,17 +190,31 @@ class GUI(QMainWindow):
         
         for row in query:
             self.encIDs.append(str(row[0]))
-            self.clientIDs.append(str(row[1]))
-            self.clientName.append(str(row[2]))
-            self.clientAddress.append(str(row[3]))
+            self.clienteIDs.append(str(row[1]))
+            self.clienteNome.append(str(row[2]))
+            self.clienteMorada.append(str(row[3]))
         
-
         self.encIDField.addItems(self.encIDs)
-        self.clientNameField.setText(self.clientName[0])
-        self.clientIDField.setText(self.clientIDs[0])
-        self.clientAddressField.setText(self.clientAddress[0])
+        self.clientNameField.setText(self.clienteNome[0])
+        self.clientIDField.setText(self.clienteIDs[0])
+        self.clienteMoradaField.setText(self.clienteMorada[0])
+
+        if self.encIDField.currentText() and not self.productIDField.currentText():
+            query = MakeTransaction(self.cursor, self.isolationComboBox.currentText(), 'SELECT', ['*'], self.dbName, 'EncLinha', [['EncID', '=', self.encIDField.currentText()]])
+                
+            for row in query:
+                self.produtoIDs.append(str(row[1]))
+                self.designacao.append(str(row[2]))
+                self.preco.append(str(row[3]))
+                self.qtd.append(str(row[4]))
+
+            self.productIDField.addItems(self.produtoIDs)
+            self.productDesignationField.setText(self.designacao[0])
+            self.productPriceField.setText(self.preco[0])
+            self.productQtdField.setText(self.qtd[0])
         
-        self.encIDField.currentIndexChanged.connect(self.UpdateEdit)
+        self.encIDField.currentIndexChanged.connect(self.UpdateUserEdit)
+        self.productIDField.currentIndexChanged.connect(self.UpdateProductEdit)
     
     # Fecha a página de Editar
     def CloseEdit(self):
@@ -185,40 +222,169 @@ class GUI(QMainWindow):
         self.encIDField.clear()
         self.clientIDField.clear()
         self.clientNameField.clear()
-        self.clientAddressField.clear()
-
+        self.clienteMoradaField.clear()
+        self.productIDField.clear()
+        self.productDesignationField.clear()
+        self.productPriceField.clear()
+        self.productQtdField.clear()
+        
         # vai limpar todos os vetores auxiliares
-        self.encIDs.clear()
-        self.clientIDs.clear()
-        self.clientName.clear()
-        self.clientAddress.clear()
+        self.ClearAuxiliar(0)
 
         self.stacked.setCurrentIndex(0)
     
-    # Atualiza os campos consoante o ID da encomenda selecionado
-    def UpdateEdit(self):
-        currentID = self.encIDField.currentIndex()
-        
-        self.clientNameField.clear()
-        self.clientNameField.setText(self.clientName[currentID])
+    # Atualiza os campos da tabela Encomenda consoante o ID da encomenda selecionado
+    def UpdateUserEdit(self):
+        if self.encIDField.currentText():
+            currentID = self.encIDField.currentIndex()
+                
+            self.clientIDField.clear()
+            self.clientIDField.setText(self.clienteIDs[currentID])
 
-        self.clientIDField.clear()
-        self.clientIDField.setText(self.clientIDs[currentID])
+            self.clientNameField.clear()
+            self.clientNameField.setText(self.clienteNome[currentID])
 
-        self.clientAddressField.clear()
-        self.clientAddressField.setText(self.clientAddress[currentID])
-    
+            self.clienteMoradaField.clear()
+            self.clienteMoradaField.setText(self.clienteMorada[currentID])
+
+            query = MakeTransaction(self.cursor, self.isolationComboBox.currentText(), 'SELECT', ['*'], self.dbName, 'EncLinha', [['EncID', '=', self.encIDField.currentText()]])
+            
+            self.ClearAuxiliar(2)
+            if self.productIDField.currentText():
+                self.productIDField.clear()
+            for row in query:
+                self.produtoIDs.append(str(row[1]))
+                self.designacao.append(str(row[2]))
+                self.preco.append(str(row[3]))
+                self.qtd.append(str(row[4]))
+
+            self.productIDField.addItems(self.produtoIDs)
+            self.productDesignationField.setText(self.designacao[0])
+            self.productPriceField.setText(self.preco[0])
+            self.productQtdField.setText(self.qtd[0])
+
+
+    # Atualiza os campos da tabela EncLinha consoante o ID do produto
+    def UpdateProductEdit(self):
+        if self.productIDField.currentText():
+            currentID = self.productIDField.currentIndex()
+
+            self.productDesignationField.clear()
+            self.productDesignationField.setText(self.designacao[currentID])
+            
+            self.productPriceField.clear()
+            self.productPriceField.setText(self.preco[currentID])
+            
+            self.productQtdField.clear()
+            self.productQtdField.setText(self.qtd[currentID])
+            
     # Grava as alterações feitas
     def EditFunction(self):
         print('yo')
     
     def BrowserUI(self):
         backButton = QPushButton('Voltar')
-        backButton.pressed.connect(lambda: self.stacked.setCurrentIndex(0))
+        backButton.pressed.connect(self.CloseBrowser)
 
-        self.browserLayout.addWidget(backButton)
+        refreshButton = QPushButton('Refresh')
+        refreshButton.pressed.connect(self.RefreshBrowser)
+
+        buttonsLayout = QHBoxLayout()
+        buttonsWidget = QWidget()
+
+        buttonsLayout.addWidget(backButton)
+        buttonsLayout.addWidget(refreshButton)
+        buttonsWidget.setLayout(buttonsLayout)
+        
+        formLayout = QFormLayout()
+        formWidget = QWidget()
+
+        self.choosedEnc = QComboBox()
+
+        
+        self.table = QTableView()
+        data = []
+        data.append(['1', '2', '3', '4', '5', '6', '7'])
+        data.append(['1', '2', '3', '4', '5', '6', '7'])
+        
+        modal = TableModel(data)
+        self.table.setModel(modal)
+        
+        formLayout.addRow(QLabel('ID da encomenda:'), self.choosedEnc)
+        formLayout.addRow(self.table)
+
+        formWidget.setLayout(formLayout)
+        self.browserLayout.addWidget(formWidget)
+        self.browserLayout.addWidget(buttonsWidget)
         self.browserWidgets.setLayout(self.browserLayout)
+    
+    # vai preencher o ID e a tabela
+    def DisplayBrowser(self):
+        self.stacked.setCurrentIndex(2)
+        
+        query = MakeTransaction(self.cursor, self.isolationComboBox.currentText(), 'SELECT', ['EncID'], self.dbName, 'Encomenda', [])   
+        
+        for row in query:
+            self.encIDs.append(str(row[0]))
+        
+        self.choosedEnc.addItems(self.encIDs)
+        if self.choosedEnc.currentText():
+            self.choosedEnc.currentIndexChanged.connect(self.RefreshBrowser)
+    
+    # vai dar refresh aos dados
+    def RefreshBrowser(self):
+        # vai limpar o que já existe
+        if self.choosedEnc.currentText():
+            self.table.clearSpans()
 
+            currentID = self.choosedEnc.currentText()
+            
+            # Conteúdo tabela Encomenda
+            query = MakeTransaction(self.cursor, self.isolationComboBox.currentText(), 'SELECT', ['*'], self.dbName, 'Encomenda', [['EncID', '=', str(currentID)]])
+            for row in query:
+                self.clienteIDs.append(str(row[0]))
+                self.clienteNome.append(str(row[1]))
+                self.clienteMorada.append(str(row[2]))
+                
+            # Conteúdo tabela EncLinha
+            query = MakeTransaction(self.cursor, self.isolationComboBox.currentText(), 'SELECT', ['*'], self.dbName, 'EncLinha', [['EncID', '=', str(currentID)]])
+            for row in query:
+                self.produtoIDs.append(str(row[0]))
+                self.designacao.append(str(row[1]))
+                self.preco.append(str(row[2]))
+                self.qtd.append(str(row[3]))
+
+    # Fecha e limpa os dados
+    def CloseBrowser(self):
+        self.stacked.setCurrentIndex(0)
+        
+        # Limpa as
+        self.choosedEnc.clear()
+        # Limpa as variáveis auxiliarews
+        self.ClearAuxiliar(0)
+        self.table.clearSpans()
+    
+    def ClearAuxiliar(self, op):
+        if op == 0:
+            self.encIDs.clear()
+            self.clienteIDs.clear()
+            self.clienteNome.clear()
+            self.clienteMorada.clear()
+            self.produtoIDs.clear()
+            self.designacao.clear()
+            self.preco.clear()
+            self.qtd.clear()
+        if op == 1:
+            self.encIDs.clear()
+            self.clienteIDs.clear()
+            self.clienteNome.clear()
+            self.clienteMorada.clear()
+        if op == 2:
+            self.produtoIDs.clear()
+            self.designacao.clear()
+            self.preco.clear()
+            self.qtd.clear()
+    
     def TimeLogUI(self):
         backButton = QPushButton('Voltar')
         backButton.pressed.connect(lambda: self.stacked.setCurrentIndex(0))
@@ -255,7 +421,7 @@ def MakeTransaction(cursor, isolationLevel: str, operation : str, returnRow: lis
     if len(restrictor) == 0:
         sqlCommand = sqlCommand + ';'
     else:
-        sqlCommand = sqlCommand + 'WHERE '
+        sqlCommand = sqlCommand + '\nWHERE '
         for i in restrictor:
             aux = i
             # Última restrição
