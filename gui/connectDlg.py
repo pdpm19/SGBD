@@ -64,6 +64,6 @@ class Connect(QDialog):
         '''   
         
         conn = pyodbc.connect('DRIVER={SQL Server};SERVER='+self.hostNameField.text()+';DATABASE='+self.dbNameField.text()+';UID='+self.usernameField.text()+';PWD='+self.userPasswordField.text(), autocommit=False)
-        ret = [self.dbNameField.text(), conn.cursor()]
+        ret = [self.dbNameField.text(), conn]
         return ret
         
