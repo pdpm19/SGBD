@@ -18,6 +18,7 @@ class Threads(QRunnable):
         self._timer = timer
         self._stackedIndex = stackedIndex
         self._stop = stop
+        print("STOP %s" %self._stop)
         
         self.run()
     
@@ -29,9 +30,10 @@ class Threads(QRunnable):
                 if self._stop:
                     break
                 # Chamar a função
-                app.RefreshBrowser()
+                print('OI')
+                
                 time.sleep(self._timer)
-        
+                print('OLA')
         if self._stackedIndex == 3:
             while True:
                 if self._stop:
@@ -342,27 +344,29 @@ class GUI(QMainWindow):
     # Grava as alterações feitas
     def EditFunction(self):
         # FALTA ISTO
-        query = 'UPDATE ' + self.dbName + '.dbo.Encomenda SET ClientID = "' + self.clientIDField.text() + '", Nome = "' + self.clientNameField.text() + '", Morada = "' + self.clienteMoradaField.text() + '" WHERE EncID = ' + self.encIDField.currentText()
-        query = 'UPDATE ' + self.dbName + '.dbo.EncLinha SET Designacao = "' + self.productDesignationField.text() + '", Preco = ' + self.productPriceField.text() + ', Qtd = ' + self.productQtdField.text() + ' WHERE EncId = ' + self.encIDField.currentText() + 'AND ProdutoID = ' + self.productIDField.currentText() 
+        query = "UPDATE " + self.dbName + ".dbo.Encomenda SET ClientID = '" + self.clientIDField.text() + '", Nome = "' + self.clientNameField.text() + "', Morada = '" + self.clienteMoradaField.text() + "' WHERE EncID = " + self.encIDField.currentText()
+        query = "UPDATE " + self.dbName + ".dbo.EncLinha SET Designacao = '" + self.productDesignationField.text() + "', Preco = '" + self.productPriceField.text() + "', Qtd = " + self.productQtdField.text() + " WHERE EncId = '" + self.encIDField.currentText() + "' AND ProdutoID = '" + self.productIDField.currentText() 
         date = datetime.now()
         dtString = date.strftime('%Y%m%d%H%M%S%f')
-        
-        #query = 'INSERT INTO ' + self.dbName + '.dbo.LogOperations (EventType, Objecto, Valor, Referencia) VALUES ("O", ' + self.encIDField.currentText(), dtString )'
-
-        print(query)
+        uniqueString = 'G1-' + dtString
+        query = "INSERT INTO " + self.dbName + ".dbo.LogOperations (EventType, Objecto, Valor, Referencia) VALUES ('O', " + self.encIDField.currentText() + ", '" + dtString + "', '" + uniqueString + "')"
+        self.cursor.execute(query)
+        self.conn.commit()
+        self.ClearAuxiliar(0)
+        self.stacked.setCurrentIndex(0)
 
     def BrowserUI(self):
         backButton = QPushButton('Voltar')
         backButton.pressed.connect(self.CloseBrowser)
 
-        refreshButton = QPushButton('Refresh')
-        refreshButton.pressed.connect(self.RefreshBrowser)
+        self.refreshButton = QPushButton('Refresh')
+        self.refreshButton.pressed.connect(self.RefreshBrowser)
 
         buttonsLayout = QHBoxLayout()
         buttonsWidget = QWidget()
 
         buttonsLayout.addWidget(backButton)
-        buttonsLayout.addWidget(refreshButton)
+        buttonsLayout.addWidget(self.refreshButton)
         buttonsWidget.setLayout(buttonsLayout)
         
         formLayout = QFormLayout()
@@ -422,10 +426,11 @@ class GUI(QMainWindow):
         self.browserTable.setModel(modal)
 
         # Vai ativar a thread
+        '''
         self.browserRefreshStop = False
-        self.browser_thread = Threads(self.timer, self.stacked.currentIndex(), lambda: self.browserRefreshStop)
+        self.browser_thread = Threads(self.timer, self.stacked.currentIndex(), self.browserRefreshStop)
         self.threadpool.start(self.browser_thread)    
-        
+        '''
     # vai dar refresh aos dados manualmente
     def RefreshBrowser(self):
         # vai limpar o que já existe
