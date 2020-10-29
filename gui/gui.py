@@ -65,6 +65,9 @@ class TableModel(QStandardItemModel):
             self.setHorizontalHeaderLabels(['NumReg', 'EventType', 'Objecto', 'Valor', 'Referencia', 'UserID', 'TerminalID', 'TerminalName', 'DCriacao'])
         nRows, nColumns = self._data.shape
         
+        if self._setHeader == 2:
+            self.setHorizontalHeaderLabels(['UserID', 'EncID', 'Tempo'])
+        
         for i in range(nRows):
             for j in range(nColumns):
                 item = QStandardItem(str(self._data[i, j]))
@@ -164,7 +167,7 @@ class GUI(QMainWindow):
         app2Button.pressed.connect(self.DisplayBrowser)
 
         app3Button = QPushButton('App3 - Log tempo')
-        app3Button.pressed.connect(lambda: self.stacked.setCurrentIndex(3))
+        app3Button.pressed.connect(self.DisplayTimeLog)
 
         app4Button = QPushButton('App4 - Log')
         app4Button.pressed.connect(self.DisplayLog)
@@ -526,12 +529,13 @@ class GUI(QMainWindow):
         buttonsWidget.setLayout(buttonsLayout)
 
         self.timeLogTable = QTableView()
-        self.hourField = QLineEdit()
+        self.timeField = QComboBox()
+        self.timeField.addItems(['Ano(s)', 'Mês(Meses)', 'Dia(s)', 'Hora(s)', 'Minuto(s)', 'Segundo(s)', 'Milisegundos'])
 
         formLayout = QFormLayout()
         formWidget = QWidget()
         
-        formLayout.addRow(QLabel('Tempo:'), self.hourField)
+        formLayout.addRow(QLabel('Tempo:'), self.timeField)
         formLayout.addRow(self.timeLogTable)
 
         formWidget.setLayout(formLayout)
@@ -539,20 +543,108 @@ class GUI(QMainWindow):
         self.timeLogLayout.addWidget(formWidget)
         self.timeLogLayout.addWidget(buttonsWidget)
         self.timeLogWidgets.setLayout(self.timeLogLayout)
-        self.DisplayTimeLog()
     
     # FALTA ISTO
     def DisplayTimeLog(self):
-        print('ola')
-        # Faz a query
-        #modal = TableModel(data, 1)
-        #self.timeLogTable.setModel(modal)
+        # Variaveis auxiliares
+        tempo = []
+        aux = []
+        
+        self.stacked.setCurrentIndex(3)
+        
+        # Trata de como queremos o Tempo
+        # https://www.w3schools.com/sql/func_sqlserver_datediff.asp
+        if self.timeField.currentText() == 'Ano(s)':
+            interval = 'YEAR'
+        elif self.timeField.currentText() == 'Mês/Meses':
+            interval = 'MONTH'
+        elif self.timeField.currentText() == 'Dia(s)':
+            interval = 'DAY'
+        elif self.timeField.currentText() == 'Hora(s)':
+            interval = 'HOUR'
+        elif self.timeField.currentText() == 'Minuto(s)':
+            interval = 'MINUTE'
+        elif self.timeField.currentText() == 'Segundo(s)':
+            interval = 'SECOND'
+        else:
+            interval = 'MILLISECOND'
+
+        SetIsolationLevel(self.conn, self.isolationComboBox.currentText())
+        # Tenho que tratar do Valor para yyyy/mm/dd hh:mm:ss:ms
+        query = "SELECT L1.Valor, L2.Valor FROM " + self.dbName + ".dbo.LogOperations L1, "+ self.dbName + ".dbo.LogOperations L2 WHERE L1.EventType = 'O' and L1.EventType = L2.EventType and L1.Referencia = L2.Referencia and L1.Valor != L2.Valor"
+        query = self.cursor.execute(query)
+        l1Valor = ''
+        l2Valor = ''
+        for row in query:
+            aux.append(str(row))
+        if len(aux) == 2:
+            l1Valor = aux[0]
+            l2Valor = aux[1]
+            l1Valor = l1Valor[:4] + '/' + l1Valor[4:6] + '/' + l1Valor[6:8] + ' ' + l1Valor[8:10] + ':' + l1Valor[10:12] + ':' + l1Valor[12:]
+            l1Valor = l2Valor[:4] + '/' + l2Valor[4:6] + '/' + l2Valor[6:8] + ' ' + l2Valor[8:10] + ':' + l2Valor[10:12] + ':' + l2Valor[12:]
+            query = "SELECT L1.UserID, L1.Objecto AS EncId, DATEDIFF(" + interval + ", '" + l1Valor + "', '" + l2Valor + "') AS Tempo FROM " +self.dbName +".dbo.LogOperations L1, " + self.dbName + ".dbo.LogOperations L2 WHERE L1.EventType = 'O' and L1.EventType = L2.EventType and L1.DCriacao < L2.DCRiacao"
+            query = self.cursor.execute(query)
+            for row in query:
+                self.userID.append(str(row[0]))
+                self.objeto.append(str(row[1]))
+                tempo.append(str(row[2]))
+            
+            aux = []
+            # Vai preencher a lista auxiliar
+            for i in range(len(self.userID)):
+                aux.append([self.userID[i], self.objeto[i], tempo[i]])
+        self.conn.commit()
+        data = np.matrix(aux)
+        modal = TableModel(data, 2)
+        self.timeLogTable.setModel(modal)
 
     def RefreshTimeLog(self):
-        print('oi')
-        #  Faz clear da tabela
-        # Preenche a tabela
-    
+        tempo = []
+        aux = []
+        self.timeLogTable.clearSpans()
+
+        if self.timeField.currentText() == 'Ano(s)':
+            interval = 'YEAR'
+        elif self.timeField.currentText() == 'Mês/Meses':
+            interval = 'MONTH'
+        elif self.timeField.currentText() == 'Dia(s)':
+            interval = 'DAY'
+        elif self.timeField.currentText() == 'Hora(s)':
+            interval = 'HOUR'
+        elif self.timeField.currentText() == 'Minuto(s)':
+            interval = 'MINUTE'
+        elif self.timeField.currentText() == 'Segundo(s)':
+            interval = 'SECOND'
+        else:
+            interval = 'MILLISECOND'
+
+        SetIsolationLevel(self.conn, self.isolationComboBox.currentText())
+        query = "SELECT L1.Valor, L2.Valor FROM " + self.dbName + ".dbo.LogOperations L1, "+ self.dbName + ".dbo.LogOperations L2 WHERE L1.EventType = 'O' and L1.EventType = L2.EventType and L1.Referencia = L2.Referencia and L1.Valor != L2.Valor"
+        query = self.cursor.execute(query)
+        l1Valor = ''
+        l2Valor = ''
+        for row in query:
+            aux.append(str(row))
+        if len(aux) == 2:
+            l1Valor = aux[0]
+            l2Valor = aux[1]
+            l1Valor = l1Valor[:4] + '/' + l1Valor[4:6] + '/' + l1Valor[6:8] + ' ' + l1Valor[8:10] + ':' + l1Valor[10:12] + ':' + l1Valor[12:]
+            l1Valor = l2Valor[:4] + '/' + l2Valor[4:6] + '/' + l2Valor[6:8] + ' ' + l2Valor[8:10] + ':' + l2Valor[10:12] + ':' + l2Valor[12:]
+            query = "SELECT L1.UserID, L1.Objecto AS EncId, DATEDIFF(" + interval + ", '" + l1Valor + "', '" + l2Valor + "') AS Tempo FROM " +self.dbName +".dbo.LogOperations L1, " + self.dbName + ".dbo.LogOperations L2 WHERE L1.EventType = 'O' and L1.EventType = L2.EventType and L1.DCriacao < L2.DCRiacao"
+            query = self.cursor.execute(query)
+            for row in query:
+                self.userID.append(str(row[0]))
+                self.objeto.append(str(row[1]))
+                tempo.append(str(row[2]))            
+            aux = []
+            # Vai preencher a lista auxiliar
+            for i in range(len(self.userID)):
+                aux.append([self.userID[i], self.objeto[i], tempo[i]])
+        self.conn.commit()
+        data = np.matrix(aux)
+        modal = TableModel(data, 2)
+        self.timeLogTable.setModel(modal)
+      
     def CloseTimeLog(self):
         self.stacked.setCurrentIndex(0)
         self.ClearAuxiliar(3)

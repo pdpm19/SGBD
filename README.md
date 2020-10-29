@@ -8,8 +8,9 @@
 ## TO DO
 - [x] Connect to DB Server
 - [x] Homepage
-- [ ] Edit
+- [x] Edit
 - [x] List
-- [ ] Time Log
+- [x] Time Log
 - [x] Log
 - [ ] Threads for automatic refresh
+- [ ] Remove the spaghetti code
