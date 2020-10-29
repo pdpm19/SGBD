@@ -343,9 +343,12 @@ class GUI(QMainWindow):
             
     # Grava as alterações feitas
     def EditFunction(self):
-        # FALTA ISTO
-        query = "UPDATE " + self.dbName + ".dbo.Encomenda SET ClientID = '" + self.clientIDField.text() + '", Nome = "' + self.clientNameField.text() + "', Morada = '" + self.clienteMoradaField.text() + "' WHERE EncID = " + self.encIDField.currentText()
-        query = "UPDATE " + self.dbName + ".dbo.EncLinha SET Designacao = '" + self.productDesignationField.text() + "', Preco = '" + self.productPriceField.text() + "', Qtd = " + self.productQtdField.text() + " WHERE EncId = '" + self.encIDField.currentText() + "' AND ProdutoID = '" + self.productIDField.currentText() 
+        query = "UPDATE " + self.dbName + ".dbo.Encomenda SET ClienteID = " + self.clientIDField.text() + ", Nome = '" + self.clientNameField.text() + "', Morada = '" + self.clienteMoradaField.text() + "' WHERE EncID = " + self.encIDField.currentText()
+        self.cursor.execute(query)
+        
+        query = "UPDATE " + self.dbName + ".dbo.EncLinha SET Designacao = '" + self.productDesignationField.text() + "', Preco = " + self.productPriceField.text() + ", Qtd = " + self.productQtdField.text() + " WHERE EncId = " + self.encIDField.currentText() + " AND ProdutoID = " + self.productIDField.currentText() 
+        self.cursor.execute(query)
+        
         date = datetime.now()
         dtString = date.strftime('%Y%m%d%H%M%S%f')
         uniqueString = 'G1-' + dtString
