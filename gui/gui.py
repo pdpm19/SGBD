@@ -11,29 +11,31 @@ from PyQt5.QtGui import *
 
 from connectDlg import Connect
 
+class ThreadSignals(QObject):
+    progress = pyqtSignal(int)
+    finished = pyqtSignal(int)
+
 # Para correr o timer do refresh automático
 class Threads(QRunnable):
     def __init__(self, timer: int, stackedIndex: int, stop: bool):
-        super(Threads, self).__init__()
+        super().__init__()
         self._timer = timer
         self._stackedIndex = stackedIndex
         self._stop = stop
-        print("STOP %s" %self._stop)
-        
+        self._timer = timer
         self.run()
     
     @pyqtSlot()    
     def run(self):
         if self._stackedIndex == 2:
             while True:
-                print('THREAD A BOMBAR!')
                 if self._stop:
-                    break
-                # Chamar a função
-                print('OI')
-                
+                    print('Thread morreu')
+                    self.signal.finished.emit(-1)
                 time.sleep(self._timer)
-                print('OLA')
+                print('Thread continua')
+                self.signal.progress.emit(1)
+        
         if self._stackedIndex == 3:
             while True:
                 if self._stop:
@@ -126,7 +128,7 @@ class GUI(QMainWindow):
 
         # Threads
         self.threadpool = QThreadPool()
-        self.timer = 1
+        self.timer = 10
         
         self.stacked.addWidget(self.homepageWidgets)
         self.stacked.addWidget(self.editWidgets)
@@ -352,9 +354,21 @@ class GUI(QMainWindow):
         query = "UPDATE " + self.dbName + ".dbo.EncLinha SET Designacao = '" + self.productDesignationField.text() + "', Preco = " + self.productPriceField.text() + ", Qtd = " + self.productQtdField.text() + " WHERE EncId = " + self.encIDField.currentText() + " AND ProdutoID = " + self.productIDField.currentText() 
         self.cursor.execute(query)
         
+        query = 'SELECT Referencia FROM ' + self.dbName + ".dbo.LogOperations WHERE Objecto = '" + self.encIDField.currentText() + "'"
+        query = self.cursor.execute(query)
+
+        aux = []
+        for row in query:
+            aux.append(row)
+        
         date = datetime.now()
         dtString = date.strftime('%Y%m%d%H%M%S%f')
-        uniqueString = 'G1-' + dtString
+        if not aux:
+            uniqueString = 'G1-' + dtString
+        else:
+            aux1 = aux[0]
+            uniqueString = aux1[0]
+        
         query = "INSERT INTO " + self.dbName + ".dbo.LogOperations (EventType, Objecto, Valor, Referencia) VALUES ('O', " + self.encIDField.currentText() + ", '" + dtString + "', '" + uniqueString + "')"
         self.cursor.execute(query)
         self.conn.commit()
@@ -430,12 +444,16 @@ class GUI(QMainWindow):
 
         modal = TableModel(data, 0)
         self.browserTable.setModel(modal)
-
-        # Vai ativar a thread
+        
         '''
-        self.browserRefreshStop = False
-        self.browser_thread = Threads(self.timer, self.stacked.currentIndex(), self.browserRefreshStop)
-        self.threadpool.start(self.browser_thread)    
+        # Vai ativar a thread
+        print('ANTES')
+        self.browserThreadStop = False
+        self.browser_thread = Threads(self.timer, self.stacked.currentIndex(), lambda: self.browserThreadStop)
+        self.threadpool.start(self.browser_thread)
+        self.browser_thread.signal.progress.connect(self.RefreshBrowser)    
+        self.browser_thread.signal.finished.connect(self.CloseBrowser)
+        print('POS THREAD')
         '''
     # vai dar refresh aos dados manualmente
     def RefreshBrowser(self):
@@ -477,6 +495,7 @@ class GUI(QMainWindow):
 
     # Fecha e limpa os dados
     def CloseBrowser(self):
+        self.browserThreadStop = True
         # Limpa as variáveis auxiliarews
         self.ClearAuxiliar(0)
         
@@ -485,7 +504,6 @@ class GUI(QMainWindow):
         
         self.ClearAuxiliar(0)
         
-        self.browserRefreshStop = True
         self.stacked.setCurrentIndex(0)
     
     def ClearAuxiliar(self, op):
@@ -498,6 +516,10 @@ class GUI(QMainWindow):
             self.designacao.clear()
             self.preco.clear()
             self.qtd.clear()
+            self.numReg.clear()
+            self.eventType.clear()
+            self.objeto.clear()
+            self.valor.clear()
         if op == 1:
             self.encIDs.clear()
             self.clienteIDs.clear()
@@ -571,38 +593,45 @@ class GUI(QMainWindow):
 
         SetIsolationLevel(self.conn, self.isolationComboBox.currentText())
         # Tenho que tratar do Valor para yyyy/mm/dd hh:mm:ss:ms
-        query = "SELECT L1.Valor, L2.Valor FROM " + self.dbName + ".dbo.LogOperations L1, "+ self.dbName + ".dbo.LogOperations L2 WHERE L1.EventType = 'O' and L1.EventType = L2.EventType and L1.Referencia = L2.Referencia and L1.Valor != L2.Valor"
+        query = "SELECT L1.Valor, L2.Valor FROM " + self.dbName + ".dbo.LogOperations L1, "+ self.dbName + ".dbo.LogOperations L2 WHERE L1.EventType = 'O' and L1.EventType = L2.EventType and L1.Referencia = L2.Referencia and L1.Valor < L2.Valor"
         query = self.cursor.execute(query)
-        l1Valor = ''
-        l2Valor = ''
         for row in query:
-            aux.append(str(row))
-        if len(aux) == 2:
-            l1Valor = aux[0]
-            l2Valor = aux[1]
-            l1Valor = l1Valor[:4] + '/' + l1Valor[4:6] + '/' + l1Valor[6:8] + ' ' + l1Valor[8:10] + ':' + l1Valor[10:12] + ':' + l1Valor[12:]
-            l1Valor = l2Valor[:4] + '/' + l2Valor[4:6] + '/' + l2Valor[6:8] + ' ' + l2Valor[8:10] + ':' + l2Valor[10:12] + ':' + l2Valor[12:]
-            query = "SELECT L1.UserID, L1.Objecto AS EncId, DATEDIFF(" + interval + ", '" + l1Valor + "', '" + l2Valor + "') AS Tempo FROM " +self.dbName +".dbo.LogOperations L1, " + self.dbName + ".dbo.LogOperations L2 WHERE L1.EventType = 'O' and L1.EventType = L2.EventType and L1.DCriacao < L2.DCRiacao"
-            query = self.cursor.execute(query)
-            for row in query:
-                self.userID.append(str(row[0]))
-                self.objeto.append(str(row[1]))
-                tempo.append(str(row[2]))
+            aux.append(row)
+        if aux:
+            fillAux = []
+            for i in range(len(aux)):
+                l_aux = aux[i]
+                l1Referencia = 'G1-' + l_aux[0]
+                l1Valor = l_aux[0]
+                l2Valor = l_aux[1]
+                l1Valor = l1Valor[:4] + '/' + l1Valor[4:6] + '/' + l1Valor[6:8] + ' ' + l1Valor[8:10] + ':' + l1Valor[10:12] + ':' + l1Valor[12:14] + '.' + l1Valor[14:]
+                l2Valor = l2Valor[:4] + '/' + l2Valor[4:6] + '/' + l2Valor[6:8] + ' ' + l2Valor[8:10] + ':' + l2Valor[10:12] + ':' + l2Valor[12:14] + '.' + l2Valor[14:]
+
+                query = "SELECT L1.UserID, L1.Objecto AS EncId, DATEDIFF(" + interval + ", '" + l1Valor + "', '" + l2Valor + "') AS Tempo FROM " +self.dbName +".dbo.LogOperations L1, " + self.dbName + ".dbo.LogOperations L2 WHERE L1.EventType = 'O' and L1.EventType = L2.EventType and L1.DCriacao < L2.DCRiacao and L1.Referencia = '" + l1Referencia + "'"
+                query = self.cursor.execute(query)
+                for row in query:
+                    self.userID.append(str(row[0]))
+                    self.objeto.append(str(row[1]))
+                    tempo.append(str(row[2]))
             
-            aux = []
-            # Vai preencher a lista auxiliar
-            for i in range(len(self.userID)):
-                aux.append([self.userID[i], self.objeto[i], tempo[i]])
+                # Vai preencher a lista auxiliar
+                for i in range(len(tempo)):
+                    fillAux.append([self.userID[i], self.objeto[i], tempo[i]])
         self.conn.commit()
-        data = np.matrix(aux)
+        data = np.matrix(fillAux)
         modal = TableModel(data, 2)
         self.timeLogTable.setModel(modal)
-
+        
     def RefreshTimeLog(self):
+       # Variaveis auxiliares
         tempo = []
         aux = []
+        
         self.timeLogTable.clearSpans()
-
+        self.ClearAuxiliar(0)
+        
+        # Trata de como queremos o Tempo
+        # https://www.w3schools.com/sql/func_sqlserver_datediff.asp
         if self.timeField.currentText() == 'Ano(s)':
             interval = 'YEAR'
         elif self.timeField.currentText() == 'Mês/Meses':
@@ -619,29 +648,33 @@ class GUI(QMainWindow):
             interval = 'MILLISECOND'
 
         SetIsolationLevel(self.conn, self.isolationComboBox.currentText())
-        query = "SELECT L1.Valor, L2.Valor FROM " + self.dbName + ".dbo.LogOperations L1, "+ self.dbName + ".dbo.LogOperations L2 WHERE L1.EventType = 'O' and L1.EventType = L2.EventType and L1.Referencia = L2.Referencia and L1.Valor != L2.Valor"
+        # Tenho que tratar do Valor para yyyy/mm/dd hh:mm:ss:ms
+        query = "SELECT L1.Valor, L2.Valor FROM " + self.dbName + ".dbo.LogOperations L1, "+ self.dbName + ".dbo.LogOperations L2 WHERE L1.EventType = 'O' and L1.EventType = L2.EventType and L1.Referencia = L2.Referencia and L1.Valor < L2.Valor"
         query = self.cursor.execute(query)
-        l1Valor = ''
-        l2Valor = ''
         for row in query:
-            aux.append(str(row))
-        if len(aux) == 2:
-            l1Valor = aux[0]
-            l2Valor = aux[1]
-            l1Valor = l1Valor[:4] + '/' + l1Valor[4:6] + '/' + l1Valor[6:8] + ' ' + l1Valor[8:10] + ':' + l1Valor[10:12] + ':' + l1Valor[12:]
-            l1Valor = l2Valor[:4] + '/' + l2Valor[4:6] + '/' + l2Valor[6:8] + ' ' + l2Valor[8:10] + ':' + l2Valor[10:12] + ':' + l2Valor[12:]
-            query = "SELECT L1.UserID, L1.Objecto AS EncId, DATEDIFF(" + interval + ", '" + l1Valor + "', '" + l2Valor + "') AS Tempo FROM " +self.dbName +".dbo.LogOperations L1, " + self.dbName + ".dbo.LogOperations L2 WHERE L1.EventType = 'O' and L1.EventType = L2.EventType and L1.DCriacao < L2.DCRiacao"
-            query = self.cursor.execute(query)
-            for row in query:
-                self.userID.append(str(row[0]))
-                self.objeto.append(str(row[1]))
-                tempo.append(str(row[2]))            
-            aux = []
-            # Vai preencher a lista auxiliar
-            for i in range(len(self.userID)):
-                aux.append([self.userID[i], self.objeto[i], tempo[i]])
+            aux.append(row)
+        if aux:
+            fillAux = []
+            for i in range(len(aux)):
+                l_aux = aux[i]
+                l1Referencia = 'G1-' + l_aux[0]
+                l1Valor = l_aux[0]
+                l2Valor = l_aux[1]
+                l1Valor = l1Valor[:4] + '/' + l1Valor[4:6] + '/' + l1Valor[6:8] + ' ' + l1Valor[8:10] + ':' + l1Valor[10:12] + ':' + l1Valor[12:14] + '.' + l1Valor[14:]
+                l2Valor = l2Valor[:4] + '/' + l2Valor[4:6] + '/' + l2Valor[6:8] + ' ' + l2Valor[8:10] + ':' + l2Valor[10:12] + ':' + l2Valor[12:14] + '.' + l2Valor[14:]
+
+                query = "SELECT L1.UserID, L1.Objecto AS EncId, DATEDIFF(" + interval + ", '" + l1Valor + "', '" + l2Valor + "') AS Tempo FROM " +self.dbName +".dbo.LogOperations L1, " + self.dbName + ".dbo.LogOperations L2 WHERE L1.EventType = 'O' and L1.EventType = L2.EventType and L1.DCriacao < L2.DCRiacao and L1.Referencia = '" + l1Referencia + "'"
+                query = self.cursor.execute(query)
+                for row in query:
+                    self.userID.append(str(row[0]))
+                    self.objeto.append(str(row[1]))
+                    tempo.append(str(row[2]))
+            
+                # Vai preencher a lista auxiliar
+                for i in range(len(tempo)):
+                    fillAux.append([self.userID[i], self.objeto[i], tempo[i]])
         self.conn.commit()
-        data = np.matrix(aux)
+        data = np.matrix(fillAux)
         modal = TableModel(data, 2)
         self.timeLogTable.setModel(modal)
       
@@ -719,7 +752,7 @@ class GUI(QMainWindow):
     def RefreshLog(self):
         self.logTable.clearSpans()
         self.ClearAuxiliar(3)
-        if int(self.numberLines.text()) != 0:
+        if int(self.numberLines.text()) != 0 or self.numberLines.text():
             query = 'SELECT * FROM ' + self.dbName + '.dbo.LogOperations'
             query = self.cursor.execute(query)
             for row in query:
