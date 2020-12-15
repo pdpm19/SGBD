@@ -461,7 +461,7 @@ class GUI(QMainWindow):
         if self.choosedEnc.currentText():
             self.browserTable.clearSpans()
             self.ClearAuxiliar(0)
-
+            
             query = 'SELECT * FROM ' + self.dbName + '.dbo.Encomenda WHERE EncID = ' + self.choosedEnc.currentText()
             query = self.cursor.execute(query)
             for row in query:
@@ -606,7 +606,7 @@ class GUI(QMainWindow):
                 l2Valor = l_aux[1]
                 l1Valor = l1Valor[:4] + '/' + l1Valor[4:6] + '/' + l1Valor[6:8] + ' ' + l1Valor[8:10] + ':' + l1Valor[10:12] + ':' + l1Valor[12:14] + '.' + l1Valor[14:]
                 l2Valor = l2Valor[:4] + '/' + l2Valor[4:6] + '/' + l2Valor[6:8] + ' ' + l2Valor[8:10] + ':' + l2Valor[10:12] + ':' + l2Valor[12:14] + '.' + l2Valor[14:]
-
+                
                 query = "SELECT L1.UserID, L1.Objecto AS EncId, DATEDIFF(" + interval + ", '" + l1Valor + "', '" + l2Valor + "') AS Tempo FROM " +self.dbName +".dbo.LogOperations L1, " + self.dbName + ".dbo.LogOperations L2 WHERE L1.EventType = 'O' and L1.EventType = L2.EventType and L1.DCriacao < L2.DCRiacao and L1.Referencia = '" + l1Referencia + "'"
                 query = self.cursor.execute(query)
                 for row in query:
